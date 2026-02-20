@@ -1,40 +1,21 @@
 module Msf::Payload::Linux::Aarch64::SleepEvasion
 
-    STUB_SLEEP_SECONDS_OFFSET = 0x04
+  def sleep_evasion(opts = {})
+    seconds = opts[:seconds] || rand(60)
+    seconds_lo = seconds & 0xffff
+    seconds_hi = (seconds >> 16) & 0xffff
+    sleep_evasion_stub = [
+      (0xd2800000 | (seconds_lo << 5) | 0x0),   #   mov     x0
+      (0xf2a00000 | (seconds_hi << 5) | 0x0),   #   movk    x0, #<seconds_hi>, lsl #16
+      0xa9bf07e0,                               #   stp     x0, xzr, [sp, #-16]!
+      0x910003e0,                               #   mov     x0, sp
+      0xd2800001,                               #   mov     x1, #0
+      0xd2800ca8,                               #   mov     x8, #101
+      0xd4000001,                               #   svc     #0
+      0x910043ff,                               #   add     sp, sp, #16
+    ].pack('V*')
 
-    def sleep_stub
-      stub = ""
-
-      # 0x00: b 0x14                     ; branch forward to code (skip data section)
-      stub << [0x14000005].pack('V')
-      # 0x04: timespec.tv_sec (8 bytes)  ; sleep duration in seconds (patched later)
-      stub << "\x00\x00\x00\x00\x00\x00\x00\x00"
-      # 0x0c: timespec.tv_nsec (8 bytes) ; nanoseconds component (always 0)
-      stub << "\x00\x00\x00\x00\x00\x00\x00\x00"
-      # 0x14: adr x0, 0x04               ; x0 -> timespec structure
-      stub << [0x10ffff80].pack('V')
-      # 0x18: mov x1, #0                 ; x1 = NULL (remaining time pointer)
-      stub << [0xd2800001].pack('V')
-      # 0x1c: mov x8, #101               ; syscall number for nanosleep
-      stub << [0xd2800ca8].pack('V')
-      # 0x20: svc #0                     ; invoke syscall
-      stub << [0xd4000001].pack('V')
-      # 0x24: execution continues to appended payload
-
-      stub
-    end
-
-    def sleep_evasion(opts = {})
-      seconds = opts[:seconds] || 0
-      return "" if seconds == 0
-
-      stub = sleep_stub.dup
-      stub[STUB_SLEEP_SECONDS_OFFSET, 8] = [seconds].pack('Q<')
-      stub
-    end
-
-    def sleep_stub_size
-      36
-    end
-
+    sleep_evasion_stub
+  end
+  
 end
