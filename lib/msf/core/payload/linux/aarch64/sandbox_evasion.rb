@@ -1,10 +1,3 @@
-#
-# Sandbox Evasion for AArch64
-# Logic: 
-# 1. Check CPU cores via sched_getaffinity (sys 204) -> Exit if < 2
-# 2. Check System Uptime via sysinfo (sys 132) -> Exit if < 600s
-# 3. Check for /.dockerenv via openat (sys 56) -> Exit if exists
-#
 module Msf::Payload::Linux::Aarch64::SandboxEvasion
   def sandbox_evasion(cores = 2, uptime = 600)
     evasion_bytes = [
